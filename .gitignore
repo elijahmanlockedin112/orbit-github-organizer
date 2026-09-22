@@ -1,0 +1,15 @@
+# Local Claude Code permissions — machine-specific, not shared
+.claude/settings.local.json
+
+# OS cruft
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editors
+.idea/
+*.swp
+
+# Nothing here needs a build, but just in case
+node_modules/
+*.log

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Orbit render checks</title>
+<link rel="stylesheet" href="../src/css/base.css">
+<link rel="stylesheet" href="../src/css/detail.css">
+<style>
+  body { padding: 24px 32px; }
+  h1 { margin-bottom: 4px; }
+  #summary { font-family: var(--mono); margin: 12px 0 24px; font-size: 15px; }
+  .case { border-top: 1px solid var(--border); padding: 6px 0; font-family: var(--mono); font-size: 12.5px; display: flex; gap: 10px; }
+  .ok { color: var(--success); }
+  .bad { color: var(--danger); }
+  .name { flex: 1; }
+  details { margin-top: 28px; }
+  .demo { border: 1px solid var(--border); border-radius: 10px; padding: 18px 22px; margin-top: 12px; background: var(--bg-elev); }
+</style>
+</head>
+<body>
+<h1>Orbit render checks</h1>
+<p style="color:var(--text-dim);margin-top:4px">Pure-function tests for the markdown renderer, syntax highlighter, line estimator and formatters. No network.</p>
+<div id="summary">running…</div>
+<div id="results"></div>
+
+<details open>
+  <summary style="cursor:pointer;color:var(--text-dim)">Rendered markdown sample</summary>
+  <div class="demo" id="demo"></div>
+</details>
+<details>
+  <summary style="cursor:pointer;color:var(--text-dim)">Highlighted code sample</summary>
+  <div class="demo" id="codedemo" style="padding:0;overflow:auto"></div>
+</details>
+
+<script type="module">
+import { renderMarkdown, sanitize, markdownElement } from '../src/js/markdown.js';
+import { tokenize, renderCode, familyOf, langOf } from '../src/js/highlight.js';
+import { estimateLines, aggregateLanguages, isCountable, langColor } from '../src/js/loc.js';
+import { compact, bytes, relTime, escapeHtml, markMatch, pool, decodeBase64 } from '../src/js/util.js';
+
+const results = document.getElementById('results');
+let pass = 0, fail = 0;
+
+function check(name, actual, expected) {
+  const ok = typeof expected === 'function' ? expected(actual) : actual === expected;
+  ok ? pass++ : fail++;
+  results.append(Object.assign(document.createElement('div'), {
+    className: 'case',
+    innerHTML: `<span class="${ok ? 'ok' : 'bad'}">${ok ? 'PASS' : 'FAIL'}</span>`
+      + `<span class="name">${escapeHtml(name)}</span>`
+      + (ok ? '' : `<span class="bad">got: ${escapeHtml(JSON.stringify(actual)).slice(0, 220)}</span>`),
+  }));
+}
+const has = (s) => (out) => String(out).includes(s);
+const lacks = (s) => (out) => !String(out).includes(s);
+
+/* ── Markdown ─────────────────────────────────────────────────── */
+
+check('heading', renderMarkdown('## Hello there'), '<h2>Hello there</h2>');
+check('paragraph + bold + italic', renderMarkdown('a **b** and _c_'), has('<strong>b</strong>'));
+check('italic with asterisks', renderMarkdown('a *c* d'), has('<em>c</em>'));
+check('strikethrough', renderMarkdown('~~gone~~'), has('<del>gone</del>'));
+check('inline code is not re-parsed', renderMarkdown('`**not bold**`'), has('<code>**not bold**</code>'));
+check('inline code escapes html', renderMarkdown('`<b>x</b>`'), has('&lt;b&gt;x&lt;/b&gt;'));
+check('link', renderMarkdown('[lbl](https://x.test)'), has('<a href="https://x.test">lbl</a>'));
+check('autolink', renderMarkdown('see https://x.test/a now'), has('<a href="https://x.test/a">'));
+check('image', renderMarkdown('![alt](https://x.test/i.png)'), has('<img src="https://x.test/i.png" alt="alt"'));
+check('relative image resolves to raw host',
+  renderMarkdown('![a](docs/x.png)', { repo: 'o/r', branch: 'main' }),
+  has('https://raw.githubusercontent.com/o/r/main/docs/x.png'));
+check('relative link resolves to blob url',
+  renderMarkdown('[a](docs/x.md)', { repo: 'o/r', branch: 'main' }),
+  has('https://github.com/o/r/blob/main/docs/x.md'));
+check('anchor link untouched', renderMarkdown('[a](#sec)'), has('href="#sec"'));
+check('unordered list', renderMarkdown('- one\n- two'), '<ul><li>one</li><li>two</li></ul>');
+check('ordered list', renderMarkdown('1. one\n2. two'), '<ol><li>one</li><li>two</li></ol>');
+check('nested list', renderMarkdown('- a\n  - b'), has('<li>a<ul><li>b</li></ul></li>'));
+check('task list', renderMarkdown('- [x] done\n- [ ] todo'), has('checked'));
+check('blockquote', renderMarkdown('> quoted'), has('<blockquote><p>quoted</p></blockquote>'));
+check('hr', renderMarkdown('---\n\ntext'), has('<hr>'));
+check('fenced code is highlighted', renderMarkdown('```js\nconst x = 1;\n```'), has('tk-kw'));
+check('fenced code escapes html', renderMarkdown('```\n<script>x</scr' + 'ipt>\n```'), lacks('<scr' + 'ipt>'));
+check('table', renderMarkdown('| a | b |\n|---|---|\n| 1 | 2 |'), has('<th>a</th>'));
+check('table alignment', renderMarkdown('| a |\n|:-:|\n| 1 |'), has('align="center"'));
+check('front matter stripped', renderMarkdown('---\ntitle: x\n---\n# Real'), '<h1>Real</h1>');
+check('raw html block passes through', renderMarkdown('<p align="center">hi</p>'), has('align="center"'));
+check('inline raw html passes through', renderMarkdown('text <kbd>K</kbd> more'), has('<kbd>K</kbd>'));
+
+/* ── Sanitiser ────────────────────────────────────────────────── */
+
+check('script tag removed', sanitize('<p>ok</p><scr' + 'ipt>alert(1)</scr' + 'ipt>'), '<p>ok</p>');
+check('iframe removed', sanitize('<iframe src="https://evil.test"></iframe>x'), 'x');
+check('onerror attribute stripped', sanitize('<img src="x.png" onerror="alert(1)">'), lacks('onerror'));
+check('javascript: href stripped', sanitize('<a href="javascript:alert(1)">x</a>'), lacks('javascript:'));
+check('safe href kept', sanitize('<a href="https://x.test">x</a>'), has('https://x.test'));
+check('links get noopener', sanitize('<a href="https://x.test">x</a>'), has('rel="noopener noreferrer"'));
+check('unknown tag unwrapped, text kept', sanitize('<marquee>hello</marquee>'), 'hello');
+check('style tag removed', sanitize('<style>body{display:none}</style>ok'), 'ok');
+check('data image url allowed', sanitize('<img src="data:image/png;base64,AAA">'), has('data:image/png'));
+check('data text url blocked', sanitize('<img src="data:text/html,<b>x</b>">'), lacks('data:text/html'));
+check('markdownElement returns .md node', markdownElement('# x').className, 'md');
+
+/* ── Highlighter ──────────────────────────────────────────────── */
+
+const types = (code, path) => tokenize(code, path).filter(([t]) => t).map(([t]) => t);
+check('lang detection: tsx', familyOf('a/b/c.tsx'), 'cstyle');
+check('lang detection: Dockerfile', langOf('deploy/Dockerfile'), 'dockerfile');
+check('lang detection: unknown', familyOf('notes.xyz'), 'plain');
+check('js keyword', types('const a = 1;', 'x.js'), (t) => t.includes('kw'));
+check('js string', types('const a = "hi";', 'x.js'), (t) => t.includes('str'));
+check('js comment', types('// note\nx', 'x.js'), (t) => t.includes('com'));
+check('js block comment spans lines', tokenize('/* a\nb */ x', 'x.js')[0][1], '/* a\nb */');
+check('python keyword', types('def f(): pass', 'x.py'), (t) => t.includes('kw'));
+check('css property', types('a { color: red; }', 'x.css'), (t) => t.includes('att'));
+check('html tag', types('<div class="a">x</div>', 'x.html'), (t) => t.includes('tag'));
+check('html embedded script highlighted as js',
+  types('<script>const a = 1;</scr' + 'ipt>', 'x.html'), (t) => t.includes('kw'));
+check('sql keywords are case-insensitive', types('SELECT * FROM t', 'x.sql'), (t) => t.includes('kw'));
+check('tokens cover the whole input',
+  tokenize('const a = "x"; // c', 'x.js').map(([, s]) => s).join(''), 'const a = "x"; // c');
+check('renderCode escapes html', renderCode('<b>&</b>', 'x.txt').innerHTML, lacks('<b>&</b>'));
+check('renderCode row count', renderCode('a\nb\nc', 'x.txt').querySelectorAll('.row').length, 3);
+check('renderCode ignores trailing newline', renderCode('a\nb\n', 'x.txt').querySelectorAll('.row').length, 2);
+check('renderCode numbers from 1', renderCode('a\nb', 'x.txt').querySelector('.ln').textContent, '1');
+check('huge file falls back to plain', renderCode('x'.repeat(400_001), 'x.js').querySelectorAll('.row').length, 1);
+
+/* ── Line estimator ───────────────────────────────────────────── */
+
+const est = estimateLines({ JavaScript: 3200, Markdown: 4800, CSS: 2800 });
+check('estimate: JS 3200 bytes ~ 100 lines', est.byLang.find((l) => l.name === 'JavaScript').lines, 100);
+check('estimate: total sums languages', est.total, 100 + Math.round(4800 / 48) + 100);
+check('estimate: code excludes markdown', est.code, 200);
+check('estimate: sorted by bytes desc', est.byLang[0].name, 'Markdown');
+check('estimate: percentages sum to 100', Math.round(est.byLang.reduce((n, l) => n + l.pct, 0)), 100);
+check('estimate: empty input', estimateLines({}).total, 0);
+check('estimate: null input', estimateLines(null).byLang.length, 0);
+check('aggregate across repos',
+  aggregateLanguages([{ langBytes: { Go: 2900 } }, { langBytes: { Go: 2900 } }]).byLang[0].lines, 200);
+check('known language colour', langColor('TypeScript'), '#3178c6');
+check('unknown language colour falls back', langColor('Whatever'), '#8b949e');
+check('countable: source file', isCountable('src/app.ts', 500), true);
+check('countable: skips node_modules', isCountable('node_modules/x/a.js', 500), false);
+check('countable: skips dist', isCountable('dist/bundle.js', 500), false);
+check('countable: skips images', isCountable('logo.png', 500), false);
+check('countable: skips huge files', isCountable('src/a.js', 2_000_000), false);
+
+/* ── Formatters ───────────────────────────────────────────────── */
+
+check('compact: hundreds', compact(842), '842');
+check('compact: thousands', compact(1234), '1.2k');
+check('compact: millions', compact(1_250_000), '1.3M');
+check('compact: null', compact(null), '—');
+check('bytes', bytes(1536), '1.5 KB');
+check('bytes: zero', bytes(0), '0 B');
+check('relTime: recent', relTime(new Date(Date.now() - 5000).toISOString()), 'just now');
+check('relTime: days', relTime(new Date(Date.now() - 3 * 86400000).toISOString()), '3 days ago');
+check('escapeHtml', escapeHtml('<a href="x">'), '&lt;a href=&quot;x&quot;&gt;');
+check('markMatch highlights', markMatch('Hello World', 'wor'), has('<mark>Wor</mark>'));
+check('markMatch escapes', markMatch('<b>', ''), '&lt;b&gt;');
+check('decodeBase64 utf-8', decodeBase64('aGVsbG8g\n8J+Riw=='), 'hello 👋');
+
+const poolOut = await pool([1, 2, 3, 4, 5], 2, async (n) => n * 2);
+check('pool preserves order', poolOut.join(','), '2,4,6,8,10');
+const poolErr = await pool([1], 1, async () => { throw new Error('boom'); });
+check('pool captures errors', poolErr[0].error.message, 'boom');
+
+/* ── Summary + demos ──────────────────────────────────────────── */
+
+const summary = document.getElementById('summary');
+summary.innerHTML = fail === 0
+  ? `<span class="ok">ALL ${pass} CHECKS PASSED</span>`
+  : `<span class="bad">${fail} FAILED</span> · ${pass} passed`;
+
+document.getElementById('demo').append(markdownElement(`# Sample README
+
+A paragraph with **bold**, _italic_, \`inline code\`, and a [link](https://example.test).
+
+## Install
+
+\`\`\`bash
+npm install orbit
+\`\`\`
+
+\`\`\`js
+export function greet(name) {
+  // say hello
+  return \`Hello, \${name}!\`;
+}
+\`\`\`
+
+### Features
+- [x] Language breakdown
+- [ ] Exact line counts
+  - nested item
+1. First
+2. Second
+
+| Option | Default | Notes |
+|--------|:-------:|-------|
+| theme  | dark    | light also works |
+| token  | none    | optional |
+
+> Blockquotes render too.
+
+---
+<p align="center"><kbd>Raw HTML</kbd> survives sanitising.</p>
+`, { repo: 'o/r', branch: 'main' }));
+
+document.getElementById('codedemo').append(renderCode(`import { useState } from 'react';
+
+/* A component, for the highlighter. */
+export default function Counter({ start = 0 }) {
+  const [n, setN] = useState(start);   // state
+  return <button onClick={() => setN(n + 1)}>Clicked {n} times</button>;
+}
+`, 'Counter.jsx'));
+</script>
+</body>
+</html>

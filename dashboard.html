@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbit</title>
+<link rel="icon" href="icons/icon32.png">
+<link rel="stylesheet" href="src/css/base.css">
+<link rel="stylesheet" href="src/css/dashboard.css">
+<link rel="stylesheet" href="src/css/detail.css">
+</head>
+<body>
+
+<div id="app" class="app" hidden>
+
+  <header class="topbar">
+    <div class="topbar__identity">
+      <img id="avatar" class="avatar" alt="" width="40" height="40">
+      <div class="topbar__who">
+        <h1 id="displayName" class="topbar__name">—</h1>
+        <div id="handle" class="topbar__handle"></div>
+      </div>
+    </div>
+
+    <div class="topbar__search">
+      <svg class="icon search-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.68 11.74a6 6 0 1 1 1.06-1.06l3.04 3.04a.75.75 0 1 1-1.06 1.06ZM11.5 7a4.5 4.5 0 1 0-9 0 4.5 4.5 0 0 0 9 0Z"/></svg>
+      <input id="search" type="search" placeholder="Search repos, languages, tags, notes…" autocomplete="off" spellcheck="false">
+      <kbd class="search-kbd">/</kbd>
+    </div>
+
+    <div class="topbar__actions">
+      <div id="rateLimit" class="ratelimit" title="GitHub API requests remaining this hour"></div>
+      <button id="refreshBtn" class="btn btn--icon" title="Refresh from GitHub (R)" aria-label="Refresh">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5a5.5 5.5 0 1 0 5.36 4.25.75.75 0 0 1 1.46-.34A7 7 0 1 1 8 1v1.5Z"/><path d="M8 .75 11.5 3 8 5.25V.75Z"/></svg>
+      </button>
+      <button id="themeBtn" class="btn btn--icon" title="Toggle theme (T)" aria-label="Toggle theme">
+        <svg class="icon icon--moon" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.6 1.1a6.9 6.9 0 1 0 5.3 9.9A5.6 5.6 0 0 1 9.6 1.1Z"/></svg>
+        <svg class="icon icon--sun" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0-8.25a.75.75 0 0 1 .75.75v.75a.75.75 0 0 1-1.5 0V3.5A.75.75 0 0 1 8 2.75Zm0 9a.75.75 0 0 1 .75.75v.75a.75.75 0 0 1-1.5 0v-.75A.75.75 0 0 1 8 11.75ZM2.75 8a.75.75 0 0 1 .75-.75h.75a.75.75 0 0 1 0 1.5H3.5A.75.75 0 0 1 2.75 8Zm9 0a.75.75 0 0 1 .75-.75h.75a.75.75 0 0 1 0 1.5h-.75A.75.75 0 0 1 11.75 8ZM4.11 4.11a.75.75 0 0 1 1.06 0l.53.53a.75.75 0 0 1-1.06 1.06l-.53-.53a.75.75 0 0 1 0-1.06Zm6.19 6.19a.75.75 0 0 1 1.06 0l.53.53a.75.75 0 1 1-1.06 1.06l-.53-.53a.75.75 0 0 1 0-1.06Zm1.6-6.19a.75.75 0 0 1 0 1.06l-.53.53a.75.75 0 0 1-1.06-1.06l.53-.53a.75.75 0 0 1 1.06 0ZM5.7 10.3a.75.75 0 0 1 0 1.06l-.53.53a.75.75 0 0 1-1.06-1.06l.53-.53a.75.75 0 0 1 1.06 0Z"/></svg>
+      </button>
+      <button id="settingsBtn" class="btn btn--icon" title="Settings" aria-label="Settings">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Zm0-1.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/><path d="M6.8.75a.75.75 0 0 1 .74-.62h.92a.75.75 0 0 1 .74.62l.17 1a5.5 5.5 0 0 1 1.1.64l.95-.37a.75.75 0 0 1 .92.32l.46.8a.75.75 0 0 1-.18.95l-.79.63a5.6 5.6 0 0 1 0 1.27l.79.63a.75.75 0 0 1 .18.95l-.46.8a.75.75 0 0 1-.92.32l-.95-.37a5.5 5.5 0 0 1-1.1.64l-.17 1a.75.75 0 0 1-.74.62h-.92a.75.75 0 0 1-.74-.62l-.17-1a5.5 5.5 0 0 1-1.1-.64l-.95.37a.75.75 0 0 1-.92-.32l-.46-.8a.75.75 0 0 1 .18-.95l.79-.63a5.6 5.6 0 0 1 0-1.27l-.79-.63a.75.75 0 0 1-.18-.95l.46-.8a.75.75 0 0 1 .92-.32l.95.37a5.5 5.5 0 0 1 1.1-.64Z" opacity=".55"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="statstrip" id="statstrip"></section>
+
+  <nav class="toolbar">
+    <div class="segmented" id="viewTabs" role="tablist">
+      <button class="segmented__btn is-active" data-view="grid" role="tab">Projects</button>
+      <button class="segmented__btn" data-view="live" role="tab">Live Sites <span class="pill" id="liveCount"></span></button>
+      <button class="segmented__btn" data-view="languages" role="tab">Languages</button>
+    </div>
+
+    <div class="toolbar__filters">
+      <select id="statusFilter" class="select" title="Filter by your status label">
+        <option value="">All statuses</option>
+      </select>
+      <select id="langFilter" class="select" title="Filter by primary language">
+        <option value="">All languages</option>
+      </select>
+      <select id="tagFilter" class="select" title="Filter by collection">
+        <option value="">All collections</option>
+      </select>
+      <select id="sortBy" class="select" title="Sort order">
+        <option value="updated">Recently updated</option>
+        <option value="created">Newest</option>
+        <option value="loc">Most code</option>
+        <option value="stars">Most stars</option>
+        <option value="name">Name A–Z</option>
+        <option value="stale">Most neglected</option>
+      </select>
+      <div class="toggles">
+        <label class="chk"><input type="checkbox" id="fPages"><span>Pages only</span></label>
+        <label class="chk"><input type="checkbox" id="fForks"><span>Show forks</span></label>
+        <label class="chk"><input type="checkbox" id="fArchived"><span>Show archived</span></label>
+      </div>
+      <button id="clearFilters" class="btn btn--ghost btn--sm">Clear</button>
+    </div>
+  </nav>
+
+  <main id="main" class="main"></main>
+
+  <footer class="footer">
+    <span id="footerCount"></span>
+    <span class="footer__hint">just start typing to search · <kbd>Esc</kbd> clear or close</span>
+  </footer>
+</div>
+
+<!-- Setup / first run -->
+<div id="setup" class="setup" hidden>
+  <div class="setup__card">
+    <div class="setup__mark">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="6"/><ellipse cx="24" cy="24" rx="21" ry="9" fill="none" stroke-width="2.5"/><ellipse cx="24" cy="24" rx="21" ry="9" fill="none" stroke-width="2.5" transform="rotate(60 24 24)"/><ellipse cx="24" cy="24" rx="21" ry="9" fill="none" stroke-width="2.5" transform="rotate(120 24 24)"/></svg>
+    </div>
+    <h2>Orbit</h2>
+    <p class="setup__sub">Every new tab, your whole GitHub portfolio — stats, code, and live sites.</p>
+
+    <label class="field">
+      <span class="field__label">GitHub username</span>
+      <input id="setupUser" type="text" placeholder="octocat" autocomplete="off" spellcheck="false">
+    </label>
+
+    <label class="field">
+      <span class="field__label">Personal access token <span class="field__opt">optional</span></span>
+      <input id="setupToken" type="password" placeholder="ghp_… or github_pat_…" autocomplete="off" spellcheck="false">
+      <span class="field__help">
+        Without a token you get 60 API requests/hour and public repos only.
+        With one: 5,000/hour plus your private repos. A classic token needs no scopes for public data;
+        tick <code>repo</code> to include private ones. Stored only in this browser profile.
+        <a href="https://github.com/settings/tokens/new?description=Orbit%20project%20organizer" target="_blank" rel="noopener">Create a token →</a>
+      </span>
+    </label>
+
+    <div id="setupError" class="setup__error" hidden></div>
+    <button id="setupGo" class="btn btn--primary btn--lg">Connect</button>
+  </div>
+</div>
+
+<!-- Loading -->
+<div id="splash" class="splash">
+  <div class="splash__orbit"><span></span><span></span><span></span></div>
+  <div id="splashMsg" class="splash__msg">Loading…</div>
+</div>
+
+<!-- Detail overlay -->
+<div id="detail" class="detail" hidden aria-modal="true" role="dialog"></div>
+
+<!-- Settings overlay -->
+<div id="settings" class="modal" hidden></div>
+
+<script type="module" src="src/js/main.js"></script>
+</body>
+</html>

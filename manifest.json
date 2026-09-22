@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Orbit — GitHub Project Organizer",
+  "version": "1.1.0",
+  "description": "Your GitHub portfolio in one tab: per-repo stats, a built-in code viewer, and live previews of your GitHub Pages sites.",
+  "minimum_chrome_version": "108",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://api.github.com/*"
+  ],
+  "action": {
+    "default_title": "Open Orbit",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+O" },
+      "description": "Open Orbit"
+    }
+  },
+  "background": {
+    "service_worker": "src/js/background.js",
+    "type": "module"
+  }
+}
